@@ -5,7 +5,11 @@ BEGIN {
 use CacheSmart;
 use Time::HiRes qw (sleep time);
 
-my $MAX_KEYS = 100000;
+$|=1;
+print "\n" x 5;
+print "-" x 80 . "\n";
+
+my $MAX_KEYS = 10000;
 
 my $obj = CacheSmart->new (
 			   'name' => "My Test Cache"
@@ -15,19 +19,22 @@ my $result;
 srand (143);
 my $i = 0;
 my $c_i = 1;
+$obj->set ('key' => 'key1',
+	   'value' => 99,
+	   'context' => 'pre-init'
+	  );
 while ($i++ <= $MAX_KEYS) {
-  my $k = "key" . int(rand($i*50000));
-  my $v = "value: " . (rand($i). " ") x 12;
-  my $r = rand(1);
+  my $k = "key" . int(rand($i));
+  my $v = rand($i);
   #print "about to set $k=$v\n";
   $obj->set ('key'      => $k,
-	     'value'    => $v,
+	     'value'    => $obj,
 	     'context'  => "initialization$c_i" ,
 	     # resource costs
 	     'size'     => length($v),
-	     'timecost' => $r
+	     'timecost' => $v
 	    );
-  if ($i % 23000 == 0) {
+  if ($i % 3700 == 0) {
     $c_i++;
   }
   #sleep ($r/100000);
@@ -82,6 +89,24 @@ foreach my $k (sort keys %{ $s }) {
   printf ("  %-40s = %s\n", $k, $s->{$k});
 }
 
+# then inspect specifically the individual cache entry's resources, sum them up and compare
+my %sums;
+while (my ($k, $v) = each (%{ $obj->{'cache'} } ) ) {
+  my $context = $v->[4];
+  my $res     = $v->[5];
+  foreach my $res_k (keys %{ $res }) {
+    $sums{$res_k}->{$context} += $res->{$res_k};
+  }
+}
+foreach my $r (sort keys %sums) {
+  my $all = 0;
+  foreach my $c (sort keys %{ $sums{$r} }) {
+    print "> res_total:$r/$c = " . $sums{$r}->{$c} . "\n";
+    $all+= $sums{$r}->{$c};
+  }
+  print "> res_total:$r/ALL = $all\n";
+}
+
 use Devel::Size qw(total_size);
-print "Total size of stats: " . total_size($s)/1024 . " KBytes\n";
-print "Total size of cache: " . total_size($obj->{'cache'})/1024 . " Kbytes\n";
+printf ("Total size of stats: %.1f KB\n", total_size($s)/1024);
+printf ("Total size of cache: %.1f KB\n", total_size($obj->{'cache'})/1024);

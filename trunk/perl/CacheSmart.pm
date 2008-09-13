@@ -69,10 +69,10 @@ $VERSION = "1.00";
 my (
     $ENTRY_VALREF,   $ENTRY_HITS,    $ENTRY_INSERT_TIME, $ENTRY_LAST_ACCESS,
     $ENTRY_CONTEXT,  $ENTRY_RES_REF
-   ) = (0, 1, 2, 3, 4, 5, 6);
+   ) = (0, 1, 2, 3, 4, 5);
 
 sub new {
-  my ($proto, %args) = @_; #shift;
+  my ($proto, %args) = @_;
   my $class = ref( $proto ) || $proto;
   my %self;
   my %stats;
@@ -140,7 +140,7 @@ sub set {
 
   my $name     = delete ($res{'key'});
   my $valref   = delete ($res{'value'});
-  my $context  = delete($res{'context'});
+  my $context  = delete ($res{'context'});
 
   my $statref  = $self->{'stats'};
 
@@ -150,16 +150,14 @@ sub set {
     return (undef);
   }
 
-  # specific named resources
-  my $size = 1;
-
   my $curtime = $self->_get_time();
 
-  if (! defined (my $size = $res{'size'})) {
-    if (!ref($size)) {
+  # specific named resources
+  my $size = 1;
+  if (! defined ($res{'size'})) {
+    if (!ref($valref)) {
       # this is a scalar, so size is length() of the string
-      $size = length($valref);
-      #print "SCALAR size=$size\n";
+      my $size = length($valref);
       $res{'size'} = $size;
     }
   }
@@ -171,26 +169,46 @@ sub set {
   my $overwrite = 0;
 
   # detect cache overwrites
-  if (defined ($cacheref->{$name})) {
+  if (defined (my $old_entry = $cacheref->{$name})) {
+    # won't this throw off the stats? TODO: test degenerate case of 90% overwrites and check stats
+    # why would stats be wrong? because I need to update stats to subtract the overwritten entry's resources
+    # before I add the new element's resources
     $statref->{'counter:insert_overwrite/ALL'}++;
     if (defined ($context)) {
       $statref->{"counter:insert_overwrite/$context"}++;
     }
 
-    my $oldvalref = $cacheref->{$name};
-    if ($oldvalref == $valref) { # compares REFERENCES, not CONTENTS! IMPT DISTINCTION!
+    my $old_valref = $old_entry->[$ENTRY_VALREF];
+    if ($old_valref == $valref) { # compares REFERENCES, not CONTENTS unless values are NUMERIC! IMPT DISTINCTION!
       # just increment a counter, don't actually change behavior
+###      print STDERR "debug: insert overwrite is a dupe for \"$name\" Same? Vals: $old_valref == \"$valref\"\n";
       $statref->{'counter:insert_duplicate/ALL'}++;
       if (defined($context)) {
 	$statref->{"counter:insert_duplicate/$context"}++;
       }
     }
-  } else {
-    $statref->{'current:elements/ALL'}++;
-    if (defined ($context)) {
-      $statref->{"current:elements/$context"}++;
+    # not a duplicate k=v
+    my $e_context = $old_entry->[$ENTRY_CONTEXT];
+###      print STDERR "debug: in set() with overwrite for key \"$name\", decrementing current:elements/$e_context\n";
+    if (defined ($e_context)) {
+      $statref->{"current:elements/$e_context"}--;
+    }
+    my $old_res = $old_entry->[$ENTRY_RES_REF];
+    while (my ($k,$v) = each %{ $old_res }) {
+###	print STDERR "debug: OLD RES: $k/$e_context = $v, for \"$name\" (subtracting it)\n";
+      if (defined ($e_context)) {
+	$statref->{"res_current:$k/$e_context"} -= $v;
+      }
+      $statref->{"res_current:$k/ALL"} -= $v;
     }
   }
+
+  $statref->{'current:elements/ALL'}++;
+  if (defined ($context)) {
+    $statref->{"current:elements/$context"}++;
+  }
+
+  # Actual cache-insert:
   $cacheref->{$name} = $entry;
   $statref->{'counter:insert/ALL'}++;
   if (defined ($context)) {
@@ -201,15 +219,15 @@ sub set {
   while (my ($k,$v) = each (%res)) {
     #print "updated resource totals/current as $k=$v\n";
     $statref->{"res_current:$k/ALL"}   += $v;
-    $statref->{"res_total_get:$k/ALL"} += $v;
+    $statref->{"res_total_set:$k/ALL"} += $v;
     if (defined ($context)) {
       $statref->{"res_current:$k/$context"}   += $v;
-      $statref->{"res_total_get:$k/$context"} += $v;
+      $statref->{"res_total_set:$k/$context"} += $v;
     }
-    if ($overwrite) {
-      $statref->{"res_total_get_overwrite:$k/ALL"} += $v;
+    if ($overwrite) { # is this meaningful?
+      $statref->{"res_total_set_overwrite:$k/ALL"} += $v;
       if (defined($context)) {
-	$statref->{"res_total_get_overwrite:$k/$context"} += $v;
+	$statref->{"res_total_set_overwrite:$k/$context"} += $v;
       }
     }
   }
@@ -312,6 +330,7 @@ sub delete {
     $statref->{"counter:delete/$context"}++;
   }
 
+  # actual deletion from cache
   my $entry;
   if (! defined ($entry = delete($cacheref->{$name}))) {
     $statref->{'counter:delete_noentry/ALL'}++;
@@ -321,10 +340,8 @@ sub delete {
     return (undef);
   }
 
-  my $e_context = $entry->[$ENTRY_CONTEXT];
-
-  # actual deletion from cache
   $statref->{'current:elements/ALL'}--;
+  my $e_context = $entry->[$ENTRY_CONTEXT];
   if (defined ($e_context)) {
     $statref->{"current:elements/$e_context"}--;
   }
@@ -439,4 +456,22 @@ sub _get_time {
   return ( &$time_func() );
 }
 
+
+
+package CachePoller;
+
+sub new {
+  my ($proto, %args) = @_;
+  my $class = ref( $proto ) || $proto;
+  my %self;
+
+
+  # and set up the final returned object
+  my $this = \%self;
+  bless ($this, $class);
+  return ($this);
+}
+
+
 1;
+
