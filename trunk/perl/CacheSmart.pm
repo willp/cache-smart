@@ -152,13 +152,15 @@ sub set {
 
   my $curtime = $self->_get_time();
 
-  # specific named resources
-  my $size = 1;
-  if (! defined ($res{'size'})) {
-    if (!ref($valref)) {
-      # this is a scalar, so size is length() of the string
-      my $size = length($valref);
-      $res{'size'} = $size;
+  # disabled automatic size calculation...
+  if (0) {
+    my $size = 1;
+    if (! defined ($res{'size'})) {
+      if (!ref($valref)) {
+	# this is a scalar, so size is length() of the string
+	my $size = length($valref);
+	$res{'size'} = $size;
+      }
     }
   }
 
@@ -234,26 +236,6 @@ sub set {
   return (1);
 }
 
-sub set_key {
-  my ($self, $k, $v) = @_;
-  return ($self->set(
-		     'key' => $k,
-		     'value' => $v
-#		     'context' => 'set_key'
-		    )
-	 );
-}
-
-sub get_key {
-  my ($self, $k, $v) = @_;
-  return ($self->get(
-		     'key' => $k
-#		     'context' => 'get_key'
-		    )
-	 );
-}
-
-
 sub get {
   my $self = shift;
   my %res  = @_;
@@ -290,9 +272,9 @@ sub get {
   my $res = $entry->[$ENTRY_RES_REF];
   while (my ($k,$v) = each (%{ $res })) {
     #print "Accessed \"$name\" in context $context, resource $k=$v, for $this_hit time, at TIME: $curtime\n"; # debug
-    $statref->{"res_total:res_hit:$k/ALL"} += $v;
+    $statref->{"res_total:get_hit:$k/ALL"} += $v;
     if (defined($context)) {
-      $statref->{"res_total:res_hit:$k/$context"} += $v;
+      $statref->{"res_total:get_hit:$k/$context"} += $v;
     }
   }
 
@@ -306,12 +288,17 @@ sub get {
   return ($entry->[$ENTRY_VALREF]);
 }
 
-# wrapper function
+# 2 wrapper functions that do not specify any context tags
+sub set_key {
+  my ($self, $k, $v) = @_;
+  return ($self->set('key' => $k, 'value' => $v));
+}
+
 sub get_key {
   my ($self, $k) = @_;
-  return ($self->get('key' => $k,
-		     'context' => 'get_key'));
+  return ($self->get('key' => $k));
 }
+
 
 sub delete {
   my $self = shift;
@@ -361,15 +348,15 @@ sub delete {
 
   my $e_hits = $entry->[$ENTRY_HITS];
   if (defined ($e_hits)) {
-    $statref->{'total:deleted_sum_hits/ALL'}     += $e_hits;
+    $statref->{'total:deleted_sum_hits/ALL'} += $e_hits;
     if (defined ($context)) {
-      $statref->{"total:deleted_sum_hits/$context"}     += $e_hits;
+      $statref->{"total:deleted_sum_hits/$context"} += $e_hits;
     }
     # and per-resource sum!
     while (my ($k,$v) = each (%{ $res })) {
-      $statref->{"res_total:deleted_sum:$k/ALL"}     += $e_hits * $v;
+      $statref->{"res_total:deleted_sum:$k/ALL"} += $e_hits * $v;
       if (defined ($context)) {
-	$statref->{"res_total:deleted_sum:$k/$context"}     += $e_hits * $v;	
+	$statref->{"res_total:deleted_sum:$k/$context"} += $e_hits * $v;	
       }
     }
   }

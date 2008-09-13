@@ -20,7 +20,7 @@ srand (143);
 my $i = 0;
 my $c_i = 1;
 $obj->set ('key' => 'key1',
-	   'value' => 99,
+	   'value' => 0,
 	   'context' => 'pre-init'
 	  );
 while ($i++ <= $MAX_KEYS) {
@@ -28,7 +28,7 @@ while ($i++ <= $MAX_KEYS) {
   my $v = rand($i);
   #print "about to set $k=$v\n";
   $obj->set ('key'      => $k,
-	     'value'    => $obj,
+	     'value'    => int($i/10),
 	     'context'  => "initialization$c_i" ,
 	     # resource costs
 	     'size'     => length($v),
@@ -101,10 +101,10 @@ while (my ($k, $v) = each (%{ $obj->{'cache'} } ) ) {
 foreach my $r (sort keys %sums) {
   my $all = 0;
   foreach my $c (sort keys %{ $sums{$r} }) {
-    print "> res_total:$r/$c = " . $sums{$r}->{$c} . "\n";
+    print "> res_current:$r/$c = " . $sums{$r}->{$c} . "\n";
     $all+= $sums{$r}->{$c};
   }
-  print "> res_total:$r/ALL = $all\n";
+  print "> res_current:$r/ALL = $all\n";
 }
 
 use Devel::Size qw(total_size);
