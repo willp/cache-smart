@@ -177,7 +177,7 @@ sub set {
     # before I add the new element's resources
     $statref->{'counter:insert_overwrite/ALL'}++;
     if (defined ($context)) {
-      $statref->{"counter:insert_overwrite/$context"}++;
+      $statref->{"counter:insert_overwrite/Caller:$context"}++;
     }
 
     my $old_valref = $old_entry->[$ENTRY_VALREF];
@@ -186,35 +186,36 @@ sub set {
 ###      print STDERR "debug: insert overwrite is a dupe for \"$name\" Same? Vals: $old_valref == \"$valref\"\n";
       $statref->{'counter:insert_duplicate/ALL'}++;
       if (defined($context)) {
-	$statref->{"counter:insert_duplicate/$context"}++;
+	$statref->{"counter:insert_duplicate/Caller:$context"}++;
       }
     }
     # not a duplicate k=v
     my $e_context = $old_entry->[$ENTRY_CONTEXT];
 ###      print STDERR "debug: in set() with overwrite for key \"$name\", decrementing current:elements/$e_context\n";
     if (defined ($e_context)) {
-      $statref->{"current:elements/$e_context"}--;
+      $statref->{"current:elements/Entry:$e_context"}--;
     }
     my $old_res = $old_entry->[$ENTRY_RES_REF];
     while (my ($k,$v) = each %{ $old_res }) {
 ###	print STDERR "debug: OLD RES: $k/$e_context = $v, for \"$name\" (subtracting it)\n";
       if (defined ($e_context)) {
-	$statref->{"res_current:$k/$e_context"} -= $v;
+	$statref->{"res_current:$k/Entry:$e_context"} -= $v;
       }
       $statref->{"res_current:$k/ALL"} -= $v;
     }
+  } else {
+    $statref->{'current:elements/ALL'}++;
   }
 
-  $statref->{'current:elements/ALL'}++;
   if (defined ($context)) {
-    $statref->{"current:elements/$context"}++;
+    $statref->{"current:elements/Entry:$context"}++;
   }
 
   # Actual cache-insert:
   $cacheref->{$name} = $entry;
   $statref->{'counter:insert/ALL'}++;
   if (defined ($context)) {
-    $statref->{"counter:insert/$context"}++;
+    $statref->{"counter:insert/Caller:$context"}++;
   }
 
   # ok, these are resources, I must process them generically
@@ -223,13 +224,13 @@ sub set {
     $statref->{"res_current:$k/ALL"}   += $v;
     $statref->{"res_total_set:$k/ALL"} += $v;
     if (defined ($context)) {
-      $statref->{"res_current:$k/$context"}   += $v;
-      $statref->{"res_total_set:$k/$context"} += $v;
+      $statref->{"res_current:$k/Entry:$context"}   += $v;
+      $statref->{"res_total_set:$k/Caller:$context"} += $v;
     }
     if ($overwrite) { # is this meaningful?
       $statref->{"res_total_set_overwrite:$k/ALL"} += $v;
       if (defined($context)) {
-	$statref->{"res_total_set_overwrite:$k/$context"} += $v;
+	$statref->{"res_total_set_overwrite:$k/Caller:$context"} += $v;
       }
     }
   }
@@ -246,7 +247,7 @@ sub get {
   my $statref = $self->{'stats'};
   $statref->{'counter:get/ALL'}++;
   if (defined ($context)) {
-    $statref->{"counter:get/$context"}++;
+    $statref->{"counter:get/Caller:$context"}++;
   }
 
   my $curtime = $self->_get_time();
@@ -255,33 +256,54 @@ sub get {
   if (! defined ($entry)) {
     $statref->{'counter:get_miss/ALL'}++;
     if (defined($context)) {
-      $statref->{"counter:get_miss/$context"}++;
+      $statref->{"counter:get_miss/Caller:$context"}++;
     }
     return (undef);
   }
 
+  my $e_context = $entry->[$ENTRY_CONTEXT];
+
   # update cache and per-entry stats
   $statref->{'counter:get_hit/ALL'}++;
   if (defined($context)) {
-    $statref->{"counter:get_hit/$context"}++;
+    $statref->{"counter:get_hit/Caller:$context"}++;
   }
+  if (defined($e_context)) {
+    $statref->{"counter:get_hit/Entry:$e_context"}++;
+  }
+
+  # This produces a ridiculous amount of metrics if enabled... probably not worth it
+  # only left it in as a placeholder for this one metric. It would need to be implemented
+  # in all methods except set(), to produce consistent metrics for
+  # the combination of (Caller + Entry) context tag performance
+  #
+  #X  if (defined($context) && defined($e_context)) {
+  #X    $statref->{"counter:get_hit/Caller+Entry:$context+$e_context"}++;
+  #X  }
+
   $entry->[$ENTRY_LAST_ACCESS]=$curtime;
   my $this_hit = ++$entry->[$ENTRY_HITS];
 
   # Get resource hashref and update totals
   my $res = $entry->[$ENTRY_RES_REF];
   while (my ($k,$v) = each (%{ $res })) {
-    #print "Accessed \"$name\" in context $context, resource $k=$v, for $this_hit time, at TIME: $curtime\n"; # debug
+    #print "Accessed \"$name\" in caller context $context, resource $k=$v, for $this_hit time, at TIME: $curtime\n"; # debug
     $statref->{"res_total:get_hit:$k/ALL"} += $v;
     if (defined($context)) {
-      $statref->{"res_total:get_hit:$k/$context"} += $v;
+      $statref->{"res_total:get_hit:$k/Caller:$context"} += $v;
+    }
+    if (defined($e_context)) {
+      $statref->{"res_total:get_hit:$k/Entry:$context"} += $v;
     }
   }
 
   my $age = $curtime - $entry->[$ENTRY_INSERT_TIME];
   $statref->{'total:hit_age/ALL'} += $age;
   if (defined ($context)) {
-    $statref->{"total:hit_age/$context"} += $age;
+    $statref->{"total:hit_age/Caller:$context"} += $age;
+  }
+  if (defined ($e_context)) {
+    $statref->{"total:hit_age/Entry:$e_context"} += $age;
   }
 
   # return REFERENCE to contents of cache
@@ -314,7 +336,7 @@ sub delete {
 
   $statref->{'counter:delete/ALL'}++;
   if (defined($context)) {
-    $statref->{"counter:delete/$context"}++;
+    $statref->{"counter:delete/Caller:$context"}++;
   }
 
   # actual deletion from cache
@@ -322,7 +344,7 @@ sub delete {
   if (! defined ($entry = delete($cacheref->{$name}))) {
     $statref->{'counter:delete_noentry/ALL'}++;
     if (defined($context)) {
-      $statref->{"counter:delete_noentry/$context"}++;
+      $statref->{"counter:delete_noentry/Caller:$context"}++;
     }
     return (undef);
   }
@@ -330,7 +352,7 @@ sub delete {
   $statref->{'current:elements/ALL'}--;
   my $e_context = $entry->[$ENTRY_CONTEXT];
   if (defined ($e_context)) {
-    $statref->{"current:elements/$e_context"}--;
+    $statref->{"current:elements/Entry:$e_context"}--;
   }
 
   # update resources (size and timecost, etc) totals for explicitly deleted objects
@@ -339,10 +361,11 @@ sub delete {
     $statref->{"res_total:deleted:$k/ALL"} += $v;
     $statref->{"res_current:$k/ALL"} -= $v;
     if (defined ($context)) {
-      $statref->{"res_total:deleted:$k/$context"} += $v;
+      $statref->{"res_total:deleted:$k/Caller:$context"} += $v;
     }
     if (defined ($e_context)) {
-      $statref->{"res_current:$k/$e_context"} -= $v;
+      $statref->{"res_current:$k/Entry:$e_context"} -= $v;
+      $statref->{"res_total:deleted:$k/Entry:$e_context"} += $v;
     }
   }
 
@@ -350,13 +373,17 @@ sub delete {
   if (defined ($e_hits)) {
     $statref->{'total:deleted_sum_hits/ALL'} += $e_hits;
     if (defined ($context)) {
-      $statref->{"total:deleted_sum_hits/$context"} += $e_hits;
+      $statref->{"total:deleted_sum_hits/Caller:$context"} += $e_hits;
     }
     # and per-resource sum!
     while (my ($k,$v) = each (%{ $res })) {
-      $statref->{"res_total:deleted_sum:$k/ALL"} += $e_hits * $v;
+      my $delta = $e_hits * $v;
+      $statref->{"res_total:deleted_sum:$k/ALL"} += $delta;
       if (defined ($context)) {
-	$statref->{"res_total:deleted_sum:$k/$context"} += $e_hits * $v;	
+	$statref->{"res_total:deleted_sum:$k/Caller:$context"} += $delta;	
+      }
+      if (defined ($e_context)) {
+	$statref->{"res_total:deleted_sum:$k/Entry:$e_context"} += $delta;	
       }
     }
   }
@@ -366,11 +393,12 @@ sub delete {
     my $age = $curtime - $e_add_time;
     $statref->{'total:deleted_age/ALL'} += $age;
     if (defined ($context)) {
-      $statref->{"total:deleted_age/$context"} += $age;
+      $statref->{"total:deleted_age/Caller:$context"} += $age;
     }
   }
 
   undef($entry); # clear refcount explicitly... not really needed.
+  return (1);
 }
 
 sub stats {
@@ -389,7 +417,7 @@ sub delete_all {
   my $zap_total = scalar ( @{ $self->{'cache'} } );
   $statref->{'counter:delete/ALL'} += $zap_total;
   if (defined ($context)) {
-    $statref->{"counter:delete/$context"} += $zap_total;
+    $statref->{"counter:delete/Caller:$context"} += $zap_total;
   }
   # only bit of looping needed... just to add up deleted sizes and timecost, it's cheap!
   my %res_k;
@@ -400,7 +428,7 @@ sub delete_all {
       $res_k{$k}++;
       $statref->{"res_total:deleted:$k/ALL"} += $v;
       if (defined ($context)) {
-	$statref->{"res_total:deleted:$k/$context"} += $v;
+	$statref->{"res_total:deleted:$k/Caller:$context"} += $v;
       }
     }
   }
@@ -410,7 +438,7 @@ sub delete_all {
   foreach my $k (keys %res_k) {
     delete ($statref->{"total:$k/ALL"});
     if (defined ($context)) {
-      delete ($statref->{"total:$k/$context"});
+      delete ($statref->{"total:$k/Caller:$context"});
     }
   }
 }
@@ -442,23 +470,6 @@ sub _get_time {
   my $time_func = $self->{'time_func'};
   return ( &$time_func() );
 }
-
-
-
-package CachePoller;
-
-sub new {
-  my ($proto, %args) = @_;
-  my $class = ref( $proto ) || $proto;
-  my %self;
-
-
-  # and set up the final returned object
-  my $this = \%self;
-  bless ($this, $class);
-  return ($this);
-}
-
 
 1;
 
