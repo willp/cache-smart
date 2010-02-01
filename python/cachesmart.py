@@ -61,7 +61,7 @@ class CacheSmart(UserDict.DictMixin):
 
     def __init__(self, name, contents=None,
         max_size_entries=None, max_size_bytes=None,
-        expire_policy=None,
+        expire_policy=None, default_context=None,
         time_func=time.time):
         print "New CacheSmart instance named:",name
         self.name = name
@@ -69,6 +69,7 @@ class CacheSmart(UserDict.DictMixin):
         counter_dict = { 'insert_overwrite':0, 'get_default_val':0, 'gets':0, 'tests':0, 'tests_true':0, 'tests_false':0,
                         'deletes':0, 'deletes_fail':0, 'set_missing_key':0}
         self.context_stack = []
+        self.default_context = default_context
         self.ctx_stats = dict(ALL=dict(current_elements=0)) # default includes an 'ALL' context
         self.stats = counter_dict
         self.data = dict()
@@ -110,7 +111,7 @@ class CacheSmart(UserDict.DictMixin):
 
     def _current_context(self):
         if len(self.context_stack) == 0:
-            return None
+            return self.default_context # defaults to None
         return (self.context_stack[-1])
 
     # Manual exposure of the context stack
@@ -123,6 +124,7 @@ class CacheSmart(UserDict.DictMixin):
         last_context = self.context_stack.pop()
         return (last_context)
 
+    # does this work right? it should hit the __getitem__() for each key...
     def __iter__(self):
         return self.data.__iter__()
 
@@ -141,7 +143,11 @@ class CacheSmart(UserDict.DictMixin):
             self.stats['tests_false'] += 1
         return is_present
 
+    def __len__(self):
+        return len(self.data)
+
     def keys(self):
+        print 'keys() called.  INEFFICIENT! Remove this somehow.'
         keylist = [k for k in self.data]
         return (keylist)
 
@@ -161,6 +167,9 @@ class CacheSmart(UserDict.DictMixin):
         print 'Not found! Returning default...'
         self.stats['get_default_val'] += 1
         return (default)
+
+    def update(self, dict=None, **kwargs):
+        raise NotImplementedError('CacheSmart does not yet support update() for bulk cache updates.  Most humble apologies.')
 
     def __str__(self):
         clist = []
@@ -202,7 +211,7 @@ if __name__ == '__main__':
     print 'Got k=',k,'  v=',v
 
     print 'keys in cache dict:',cs.keys()
-    time.sleep(1)
+    time.sleep(0.15)
 
     ret = 'first' in cs
     print 'Is "first" in cache? Answer:', ret
@@ -218,6 +227,7 @@ if __name__ == '__main__':
     cs['seven'] = 'SEVEN(manual)'
     cs.pop_context()
 
+    print '\n\nITERATING through entire cache object....'
     for (k,v) in cs.iteritems():
         print '%s = %s' % (k, v)
 
@@ -226,3 +236,7 @@ if __name__ == '__main__':
 
     print '\n current cache contents:'
     print cs.data
+    print 'LEN:',len(cs)
+    print 'and userdict...'
+    x = UserDict.DictMixin()
+    print dir(x)
