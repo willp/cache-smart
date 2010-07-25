@@ -1,6 +1,7 @@
 #!/usr/bin/python
 #
 # cachesmart, J. Will Pierce
+# trivial edit
 #
 # this file includes CacheSmart class, which implements the instrumented cache
 # with a similar API to the perl implementation
